@@ -3,7 +3,7 @@
  * Plugin Name: Security Bank WebCollect for WooCommerce
  * Plugin URI: https://securitybankcollect.com/
  * Description: Accept Visa, Mastercard, and popular E-Wallet payments via Security Bank WebCollect.
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: Ramer Ian Dela Pena
  * Author URI: https://ramerian.me
  * License: GPL2
@@ -52,7 +52,6 @@ function securitybank_webcollect_init() {
          */
         public $testmode;
         public $secret_key;
-        public $publishable_key;
         public $enabled;
         public $title;
         public $description;
@@ -80,15 +79,11 @@ function securitybank_webcollect_init() {
             $this->enabled = $this->get_option('enabled');
             $this->testmode = 'yes' === $this->get_option('testmode');
             
-            // Load keys based on mode
+            // Load secret key based on mode
             $this->secret_key = $this->testmode 
                 ? $this->get_option('test_secret_key') 
                 : $this->get_option('live_secret_key');
                 
-            $this->publishable_key = $this->testmode
-                ? $this->get_option('test_publishable_key')
-                : $this->get_option('live_publishable_key');
-            
             // Actions
             add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
             add_action('woocommerce_api_securitybank_webcollect_webhook', array($this, 'handle_webhook'));
@@ -126,26 +121,12 @@ function securitybank_webcollect_init() {
                     'default' => 'yes',
                     'description' => __('Place the payment gateway in test mode using test API keys.', 'wc-securitybank-webcollect'),
                 ),
-                'test_publishable_key' => array(
-                    'title' => __('Test Publishable Key', 'wc-securitybank-webcollect'),
-                    'type' => 'text',
-                    'description' => __('Used for client-side operations (pk_test_...).', 'wc-securitybank-webcollect'),
-                    'default' => '',
-                    'placeholder' => 'pk_test_xxxxxxxxxx'
-                ),
                 'test_secret_key' => array(
                     'title' => __('Test Secret Key', 'wc-securitybank-webcollect'),
                     'type' => 'password',
                     'description' => __('Used for server-side operations (sk_test_...).', 'wc-securitybank-webcollect'),
                     'default' => '',
                     'placeholder' => 'sk_test_xxxxxxxxxx'
-                ),
-                'live_publishable_key' => array(
-                    'title' => __('Live Publishable Key', 'wc-securitybank-webcollect'),
-                    'type' => 'text',
-                    'description' => __('Used for client-side operations (pk_live_...).', 'wc-securitybank-webcollect'),
-                    'default' => '',
-                    'placeholder' => 'pk_live_xxxxxxxxxx'
                 ),
                 'live_secret_key' => array(
                     'title' => __('Live Secret Key', 'wc-securitybank-webcollect'),
@@ -186,20 +167,22 @@ function securitybank_webcollect_init() {
             try {
                 $session = $this->create_checkout_session($order);
                 
-                if (isset($session['url'])) {
+                // Check for the payment_url instead of url
+                if (isset($session['payment_url'])) {
                     return array(
                         'result' => 'success',
-                        'redirect' => $session['url']
+                        'redirect' => $session['payment_url']
                     );
                 }
-                throw new Exception(__('Payment gateway error: Could not create checkout session', 'wc-securitybank-webcollect'));
+                throw new Exception(__('Payment gateway error: Could not create checkout session.', 'wc-securitybank-webcollect'));
             } catch (Exception $e) {
-                $this->log_error($e->getMessage());
-                wc_add_notice($e->getMessage(), 'error');
+                $this->log_error($e->getMessage()); // Log the error message
+                wc_add_notice(__('An error occurred while processing your payment. Please try again.', 'wc-securitybank-webcollect'), 'error');
                 return false;
             }
         }
-        
+
+
         private function validate_session_data($data) {
             // Check required fields
             $required = ['currency', 'payment_method_types', 'line_items', 'mode'];
@@ -237,7 +220,6 @@ function securitybank_webcollect_init() {
             $line_items = array();
             foreach ($order->get_items() as $item) {
                 $product = $item->get_product();
-                $image_id = $product->get_image_id();
                 
                 $line_items[] = array(
                     'name' => $item->get_name(),
@@ -257,7 +239,7 @@ function securitybank_webcollect_init() {
         
             $data = array(
                 'currency' => 'php', // Currency specified here
-                'payment_method_types' => $this->get_option('payment_methods', array('card')),
+                'payment_method_types' => $this->get_option('payment_methods') ?: array('card'),
                 'line_items' => $line_items,
                 'phone_number_collection' => true,
                 'mode' => 'payment',
@@ -276,10 +258,14 @@ function securitybank_webcollect_init() {
             }
         
             return WC_SecurityBank_WebCollect_API::create_session(
-                $this->publishable_key,  // Updated to include publishable key
-                $this->secret_key, 
+                $this->secret_key,
                 $data
             );
+            
+            $session = WC_SecurityBank_WebCollect_API::create_session($this->secret_key, $data);
+            $this->log_error('Session response: ' . json_encode($session)); // Log the response for debugging
+        
+            return $session;
         }
         
         /**
@@ -294,7 +280,6 @@ function securitybank_webcollect_init() {
 
             try {
                 $customer_id = WC_SecurityBank_WebCollect_API::create_customer(
-                    $this->publishable_key, // Updated to include publishable key
                     $this->secret_key,
                     $order->get_billing_email(),
                     $order->get_billing_first_name() . ' ' . $order->get_billing_last_name()
