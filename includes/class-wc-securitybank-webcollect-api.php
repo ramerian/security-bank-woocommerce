@@ -9,12 +9,12 @@ class WC_SecurityBank_WebCollect_API {
     /**
      * Create checkout session
      */
-    public static function create_session($publishable_key, $secret_key, $data) {
+    public static function create_session($secret_key, $data) {
         $url = self::API_BASE_URL . '/v2/sessions';
 
         $args = array(
             'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($publishable_key . ':' . $secret_key),
+                'Authorization' => 'Basic ' . base64_encode($secret_key . ':'),
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json'
             ),
@@ -28,7 +28,7 @@ class WC_SecurityBank_WebCollect_API {
 
         if (is_wp_error($response)) {
             self::log_error('Request failed: ' . $response->get_error_message());
-            throw new Exception($response->get_error_message());
+            throw new Exception(__('An error occurred while processing your request. Please try again.', 'wc-securitybank-webcollect'));
         }
 
         $response_code = wp_remote_retrieve_response_code($response);
@@ -36,8 +36,8 @@ class WC_SecurityBank_WebCollect_API {
 
         self::log_response($response_code, $response_body);
 
-        if ($response_code !== 200) {
-            $error_message = $response_body['error']['message'] ?? 'API request failed';
+        if ($response_code !== 200 && $response_code !== 201) {
+            $error_message = $response_body['error']['message'] ?? __('API request failed', 'wc-securitybank-webcollect');
             self::log_error('API Error: ' . $error_message);
             throw new Exception($error_message);
         }
@@ -48,18 +48,23 @@ class WC_SecurityBank_WebCollect_API {
     /**
      * Create customer
      */
-    public static function create_customer($publishable_key, $secret_key, $email, $name) {
+    public static function create_customer($secret_key, $email, $name) {
         $url = self::API_BASE_URL . '/v2/customers';
+
+        // Ensure description is not empty
+        if (empty($name)) {
+            throw new Exception(__('Description is required to create a customer.', 'wc-securitybank-webcollect'));
+        }
 
         $data = array(
             'email' => $email,
-            'description' => $name,
+            'description' => $name,  // Use name as description
             'metadata' => array()
         );
 
         $args = array(
             'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($publishable_key . ':' . $secret_key),
+                'Authorization' => 'Basic ' . base64_encode($secret_key . ':'),
                 'Content-Type' => 'application/json'
             ),
             'body' => json_encode($data),
@@ -72,7 +77,7 @@ class WC_SecurityBank_WebCollect_API {
 
         if (is_wp_error($response)) {
             self::log_error('Request failed: ' . $response->get_error_message());
-            throw new Exception($response->get_error_message());
+            throw new Exception(__('An error occurred while creating the customer. Please try again.', 'wc-securitybank-webcollect'));
         }
 
         $response_code = wp_remote_retrieve_response_code($response);
@@ -81,7 +86,7 @@ class WC_SecurityBank_WebCollect_API {
         self::log_response($response_code, $response_body);
 
         if ($response_code !== 200) {
-            $error_message = $response_body['error']['message'] ?? 'Customer creation failed';
+            $error_message = $response_body['error']['message'] ?? __('Customer creation failed', 'wc-securitybank-webcollect');
             self::log_error('API Error: ' . $error_message);
             throw new Exception($error_message);
         }
@@ -94,8 +99,8 @@ class WC_SecurityBank_WebCollect_API {
      */
     private static function log_request($method, $url, $data) {
         $logger = wc_get_logger();
-        $logger->debug("API Request: $method $url\n" . json_encode($data, JSON_PRETTY_PRINT), 
-                       array('source' => 'securitybank-api'));
+        $logger->debug("API Request: $method $url\n" . json_encode($data, JSON_PRETTY_PRINT),
+                       array('source' => 'securitybank-webcollect'));
     }
 
     /**
@@ -103,12 +108,12 @@ class WC_SecurityBank_WebCollect_API {
      */
     private static function log_response($code, $body) {
         $logger = wc_get_logger();
-        $logger->debug("API Response: $code\n" . json_encode($body, JSON_PRETTY_PRINT), 
-                       array('source' => 'securitybank-api'));
+        $logger->debug("API Response: $code\n" . json_encode($body, JSON_PRETTY_PRINT),
+                       array('source' => 'securitybank-webcollect'));
 
         if ($code !== 200) {
-            $logger->error("API Error: $code\n" . json_encode($body, JSON_PRETTY_PRINT), 
-                           array('source' => 'securitybank-api'));
+            $logger->error("API Error: $code\n" . json_encode($body, JSON_PRETTY_PRINT),
+                           array('source' => 'securitybank-webcollect'));
         }
     }
 
