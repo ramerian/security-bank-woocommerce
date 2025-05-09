@@ -152,11 +152,12 @@ function securitybank_webcollect_init() {
                     'title' => __('Webhook URL', 'wc-securitybank-webcollect'),
                     'type' => 'text',
                     'description' => __('Set this URL in your Security Bank WebCollect dashboard.', 'wc-securitybank-webcollect'),
-                    'default' => add_query_arg('wc-api', 'securitybank_webcollect_webhook', home_url('/')),
+                    'default' => home_url('/?wc-api=securitybank_webcollect_webhook'),
                     'custom_attributes' => array('readonly' => 'readonly')
                 )
             );
         }
+
         
         /**
          * Process the payment and return the result
@@ -210,7 +211,7 @@ function securitybank_webcollect_init() {
             return true;
         }
         
-        /**
+         /**
          * Create checkout session with Security Bank WebCollect
          */
         private function create_checkout_session($order) {
@@ -237,8 +238,11 @@ function securitybank_webcollect_init() {
                 );
             }
         
+            // Get the WooCommerce default currency
+            $currency = get_woocommerce_currency();
+        
             $data = array(
-                'currency' => 'php', // Currency specified here
+                'currency' => $currency, // Use WooCommerce default currency
                 'payment_method_types' => $this->get_option('payment_methods') ?: array('card'),
                 'line_items' => $line_items,
                 'phone_number_collection' => true,
@@ -261,12 +265,8 @@ function securitybank_webcollect_init() {
                 $this->secret_key,
                 $data
             );
-            
-            $session = WC_SecurityBank_WebCollect_API::create_session($this->secret_key, $data);
-            $this->log_error('Session response: ' . json_encode($session)); // Log the response for debugging
-        
-            return $session;
         }
+
         
         /**
          * Get or create Security Bank customer ID
