@@ -5,12 +5,13 @@ if (!defined('ABSPATH')) {
 
 class WC_SecurityBank_WebCollect_API {
     const API_BASE_URL = 'https://pay.securitybankcollect.com/api';
+    const API_VERSION = 'v2'; // Add version as a constant
 
     /**
      * Create checkout session
      */
     public static function create_session($secret_key, $data) {
-        $url = self::API_BASE_URL . '/v2/sessions';
+        $url = self::API_BASE_URL . '/' . self::API_VERSION . '/sessions';
 
         $args = array(
             'headers' => array(
@@ -49,7 +50,7 @@ class WC_SecurityBank_WebCollect_API {
      * Create customer
      */
     public static function create_customer($secret_key, $email, $name) {
-        $url = self::API_BASE_URL . '/v2/customers';
+        $url = self::API_BASE_URL . '/' . self::API_VERSION . '/customers';
 
         // Ensure description is not empty
         if (empty($name)) {
